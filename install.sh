@@ -47,11 +47,11 @@ fi
 echo "📦 Installing system dependencies for Mason..."
 if [ -x "$(command -v apt)" ]; then
     sudo apt update
-    sudo apt install -y unzip curl tar python3 python3-pip nodejs npm python3-venv
+    sudo apt install -y unzip curl tar python3 python3-pip nodejs npm python3-venv xclip
 elif [ -x "$(command -v pacman)" ]; then
-    sudo pacman -Syu --noconfirm unzip curl tar python python-pip nodejs npm python-virtualenv
+    sudo pacman -Syu --noconfirm unzip curl tar python python-pip nodejs npm python-virtualenv xclip
 elif [ -x "$(command -v dnf)" ]; then
-    sudo dnf install -y unzip curl tar python3 python3-pip nodejs npm python3-venv
+    sudo dnf install -y unzip curl tar python3 python3-pip nodejs npm python3-venv xclip
 else
     echo "⚠️ Unknown package manager. Please install unzip, curl, and tar manually."
 fi
