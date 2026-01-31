@@ -1,15 +1,45 @@
 #!/usr/bin/env bash
 set -e
 
+# -------------------------
+# Privilege handling
+# -------------------------
+SUDO=""
+
+if [[ "$EUID" -eq 0 ]]; then
+    SUDO=""
+elif command -v sudo >/dev/null 2>&1; then
+    echo "🔐 This uninstaller requires sudo access."
+    echo "   Please enter your password to continue."
+
+    if sudo -v; then
+        SUDO="sudo"
+    else
+        cat <<'EOF'
+❌ Failed to obtain sudo access.
+
+This usually means:
+  • Your user is not allowed to use sudo
+  • You are on a shared / university / restricted system
+
+Please run this uninstaller:
+  • As root, or
+  • On a machine where you have sudo access, or
+  • After an administrator grants you sudo privileges
+
+Aborting to avoid partial removal.
+EOF
+        exit 1
+    fi
+else
+    # No sudo installed (e.g. Termux)
+    SUDO=""
+fi
+
 echo "🧹 Interactive Uninstall Script"
-echo "This will allow you to uninstall packages and clean up dotfiles, Neovim, and Mason."
 echo
 
-# -------------------------
-# Helper function
-# -------------------------
 confirm() {
-    # $1 = message
     while true; do
         read -rp "$1 [y/n]: " yn
         case $yn in
@@ -21,99 +51,41 @@ confirm() {
 }
 
 # -------------------------
-# Remove dotfiles and backups
+# Dotfiles
 # -------------------------
-echo
-echo "📂 Dotfiles and backups"
+echo "📂 Dotfiles"
 
-if [ -L ~/.bashrc ]; then
-    confirm "Remove symlink ~/.bashrc?" && rm ~/.bashrc
-fi
-if [ -f ~/.bashrc.bak ]; then
-    confirm "Restore backup ~/.bashrc.bak?" && mv ~/.bashrc.bak ~/.bashrc
-fi
-
-if [ -L ~/.config/nvim ]; then
-    confirm "Remove symlink ~/.config/nvim?" && rm -rf ~/.config/nvim
-fi
-if [ -d ~/.config/nvim.bak ]; then
-   confirm "Restore backup ~/.config/nvim.bak?" && mv ~/.config/nvim.bak ~/.config/nvim
-fi
+[ -L ~/.bashrc ] && confirm "Remove ~/.bashrc symlink?" && rm ~/.bashrc
+[ -L ~/.config/nvim ] && confirm "Remove ~/.config/nvim symlink?" && rm -rf ~/.config/nvim
 
 # -------------------------
-# Remove Neovim AppImage
+# Neovim
 # -------------------------
-echo
 echo "📦 Neovim"
 
-if [ -f /opt/nvim/nvim ]; then
-    confirm "Remove /opt/nvim/nvim AppImage?" && sudo rm -f /opt/nvim/nvim
-fi
-
-if [ -d /opt/nvim ]; then
-    confirm "Remove /opt/nvim directory?" && sudo rmdir /opt/nvim 2>/dev/null || true
-fi
-
-if grep -q '/opt/nvim' ~/.bashrc; then
-    confirm "Remove /opt/nvim from PATH in ~/.bashrc?" && sed -i '/\/opt\/nvim/d' ~/.bashrc
+if command -v pkg >/dev/null 2>&1; then
+    confirm "Uninstall Neovim (Termux)?" && pkg uninstall -y neovim
+else
+    [ -f /opt/nvim/nvim ] && confirm "Remove Neovim AppImage?" && $SUDO rm -f /opt/nvim/nvim
+    [ -d /opt/nvim ] && confirm "Remove /opt/nvim directory?" && $SUDO rmdir /opt/nvim 2>/dev/null || true
+    grep -q '/opt/nvim' ~/.bashrc && confirm "Remove /opt/nvim from PATH?" && sed -i '/\/opt\/nvim/d' ~/.bashrc
 fi
 
 # -------------------------
-# Remove Mason
+# Mason
 # -------------------------
-echo
 echo "📦 Mason"
-
-if [ -d ~/.local/share/nvim/mason ]; then
-    confirm "Remove Mason folder (~/.local/share/nvim/mason)?" && rm -rf ~/.local/share/nvim/mason
-fi
+[ -d ~/.local/share/nvim/mason ] && confirm "Remove Mason?" && rm -rf ~/.local/share/nvim/mason
 
 # -------------------------
-# Interactive system package uninstall (non-essential only)
+# System packages
 # -------------------------
-echo
 echo "📦 System packages"
 
-PACKAGES=(unzip curl tar python3 python3-pip nodejs npm python3-venv xclip)
-ESSENTIAL_PACKAGES=(curl tar python3)
-
-# Detect package manager
-if [ -x "$(command -v apt)" ]; then
-    PKG_MANAGER="apt"
-elif [ -x "$(command -v dnf)" ]; then
-    PKG_MANAGER="dnf"
-elif [ -x "$(command -v pacman)" ]; then
-    PKG_MANAGER="pacman"
-else
-    echo "⚠️ Unsupported package manager. Cannot uninstall system packages."
-    PKG_MANAGER=""
+if command -v pkg >/dev/null 2>&1; then
+    confirm "Autoremove unused Termux packages?" && pkg autoremove
+elif command -v apt >/dev/null 2>&1; then
+    confirm "Autoremove unused system packages?" && $SUDO apt autoremove -y
 fi
 
-for pkg in "${PACKAGES[@]}"; do
-    # Skip essential packages
-    if [[ " ${ESSENTIAL_PACKAGES[*]} " == *" $pkg "* ]]; then
-        echo "⚠️ Skipping essential package $pkg"
-        continue
-    fi
-
-    # Only prompt if package exists
-    if command -v "$pkg" >/dev/null 2>&1; then
-        if confirm "Uninstall $pkg?"; then
-            case $PKG_MANAGER in
-                apt)
-                    sudo apt remove --purge -y "$pkg"
-                    ;;
-                dnf)
-                    sudo dnf remove -y "$pkg"
-                    ;;
-                pacman)
-                    sudo pacman -Rns --noconfirm "$pkg"
-                    ;;
-            esac
-        fi
-    fi
-    echo
-done
-
-echo
-echo "✅ Uninstall complete. Restart your shell to apply changes."
+echo "✅ Uninstall complete. Restart your shell."
